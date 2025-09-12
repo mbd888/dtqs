@@ -36,7 +36,7 @@ dtqs provides a robust, Redis-backed task queue solution that enables distribute
 - [x] RESTful HTTP API with comprehensive endpoints
 
 ### Next Release (v1.1)
-- [ ] Docker containerization and Docker Compose setup
+- [X] Docker containerization and Docker Compose setup
 - [ ] Kubernetes deployment manifests
 - [ ] Enhanced monitoring dashboard
 - [ ] Task scheduling with cron-like expressions
