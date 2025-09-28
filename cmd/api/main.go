@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -117,7 +118,7 @@ func createTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -127,11 +128,44 @@ func createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate task type
+	validTypes := map[string]bool{
+		"email":            true,
+		"image_processing": true,
+		"data_export":      true,
+		"notification":     true,
+		"cleanup":          true,
+	}
+
+	if !validTypes[req.Type] {
+		http.Error(w, fmt.Sprintf("Invalid task type. Valid types: %v", getValidTypes(validTypes)), http.StatusBadRequest)
+		return
+	}
+
 	t := task.New(req.Type, req.Payload)
 
-	// Set priority if provided (0-3 range)
-	if req.Priority >= 0 && req.Priority <= 3 {
-		t.Priority = task.Priority(req.Priority)
+	// Set priority with validation (0-3 range)
+	switch req.Priority {
+	case 0:
+		t.Priority = task.PriorityLow
+	case 1:
+		t.Priority = task.PriorityNormal
+	case 2:
+		t.Priority = task.PriorityHigh
+	case 3:
+		t.Priority = task.PriorityCritical
+	default:
+		if req.Priority != 0 { // 0 is default, so don't error for omitted priority
+			http.Error(w, "Priority must be between 0 (low) and 3 (critical)", http.StatusBadRequest)
+			return
+		}
+		t.Priority = task.PriorityNormal
+	}
+
+	// Validate payload based on the task type
+	if err := validateTaskPayload(req.Type, req.Payload); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid payload: %v", err), http.StatusBadRequest)
+		return
 	}
 
 	if err := q.Enqueue(r.Context(), t); err != nil {
@@ -140,15 +174,18 @@ func createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return more info in response
+	// Return comprehensive response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":       t.ID,
-		"status":   string(t.Status),
-		"priority": t.Priority, // Include priority in response
+		"id":         t.ID,
+		"type":       t.Type,
+		"status":     string(t.Status),
+		"priority":   t.Priority,
+		"created_at": t.CreatedAt,
 	})
 	if err != nil {
+		log.Printf("Failed to encode response: %v", err)
 		return
 	}
 }
@@ -159,4 +196,38 @@ func loggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		log.Printf("%s %s", r.Method, r.URL.Path)
 		next(w, r)
 	}
+}
+
+func getValidTypes(validTypes map[string]bool) []string {
+	types := make([]string, 0, len(validTypes))
+	for t := range validTypes {
+		types = append(types, t)
+	}
+	return types
+}
+
+func validateTaskPayload(taskType string, payload map[string]interface{}) error {
+	switch taskType {
+	case "email":
+		if to, ok := payload["to"].(string); !ok || to == "" {
+			return errors.New("email tasks require 'to' field with valid email address")
+		}
+		if subject, ok := payload["subject"].(string); !ok || subject == "" {
+			return errors.New("email tasks require 'subject' field")
+		}
+	case "image_processing":
+		if imageURL, ok := payload["image_url"].(string); !ok || imageURL == "" {
+			return errors.New("image_processing tasks require 'image_url' field")
+		}
+	case "data_export":
+		format, ok := payload["format"].(string)
+		if !ok || format == "" {
+			return errors.New("data_export tasks require 'format' field")
+		}
+		validFormats := map[string]bool{"csv": true, "json": true, "xlsx": true}
+		if !validFormats[format] {
+			return errors.New("data_export format must be one of: csv, json, xlsx")
+		}
+	}
+	return nil
 }
