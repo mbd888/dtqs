@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -46,14 +47,20 @@ func main() {
 }
 
 // Root handler for "/"
-func rootHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Golang DTQS API is running"))
+func rootHandler(w http.ResponseWriter, _ *http.Request) {
+	_, err := w.Write([]byte("DTQS API is running"))
+	if err != nil {
+		return
+	}
 }
 
 // Health check endpoint
-func healthHandler(w http.ResponseWriter, r *http.Request) {
+func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	if err != nil {
+		return
+	}
 }
 
 // Task endpoint with method routing
@@ -66,7 +73,7 @@ func tasksHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Get single task by ID
+// Get a single task by ID
 func taskHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -85,7 +92,7 @@ func taskHandler(w http.ResponseWriter, r *http.Request) {
 	// Get task from queue
 	t, err := q.Get(r.Context(), taskID)
 	if err != nil {
-		if err == queue.ErrTaskNotFound {
+		if errors.Is(err, queue.ErrTaskNotFound) {
 			http.Error(w, "Task not found", http.StatusNotFound)
 		} else {
 			log.Printf("Error getting task %s: %v", taskID, err)
@@ -95,10 +102,13 @@ func taskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(t)
+	err = json.NewEncoder(w).Encode(t)
+	if err != nil {
+		return
+	}
 }
 
-// Create task handler with priority support
+// Create a task handler with priority support
 func createTask(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Type     string                 `json:"type"`
@@ -133,11 +143,14 @@ func createTask(w http.ResponseWriter, r *http.Request) {
 	// Return more info in response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"id":       t.ID,
 		"status":   string(t.Status),
 		"priority": t.Priority, // Include priority in response
 	})
+	if err != nil {
+		return
+	}
 }
 
 // Simple logging middleware

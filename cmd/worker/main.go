@@ -25,7 +25,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to connect to redis: %v", err)
 	}
-	defer q.Close()
+	defer func(q *queue.RedisQueue) {
+		err := q.Close()
+		if err != nil {
+
+		}
+	}(q)
 
 	// Get worker count from env or default to 5
 	workerCount := 5

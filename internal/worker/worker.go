@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"log"
 	"time"
 
@@ -35,7 +36,7 @@ func (w *Worker) Start(ctx context.Context) {
 		// try to get a task
 		t, err := w.queue.Dequeue(ctx)
 		if err != nil {
-			if err == queue.ErrQueueEmpty {
+			if errors.Is(err, queue.ErrQueueEmpty) {
 				// no tasks, wait a bit
 				time.Sleep(1 * time.Second)
 				continue
@@ -54,7 +55,10 @@ func (w *Worker) processTask(ctx context.Context, t *task.Task) {
 
 	t.Status = task.StatusRunning
 	t.UpdatedAt = time.Now()
-	w.queue.Update(ctx, t)
+	err := w.queue.Update(ctx, t)
+	if err != nil {
+		return
+	}
 
 	// simulate work
 	time.Sleep(2 * time.Second)

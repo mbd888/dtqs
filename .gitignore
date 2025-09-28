@@ -1,1 +1,5 @@
 .env
+
+.qodana/
+qodana-report/
+qodana.sarif.json

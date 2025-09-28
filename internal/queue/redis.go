@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -56,10 +57,10 @@ func (q *RedisQueue) Enqueue(ctx context.Context, t *task.Task) error {
 }
 
 func (q *RedisQueue) Dequeue(ctx context.Context) (*task.Task, error) {
-	// Pop from sorted set (lowest score = highest priority)
+	// Pop from a sorted set (the lowest score = highest priority)
 	result := q.client.ZPopMin(ctx, queueKey, 1)
 	if err := result.Err(); err != nil {
-		if err == redis.Nil {
+		if errors.Is(err, redis.Nil) {
 			return nil, ErrQueueEmpty
 		}
 		return nil, err
@@ -75,8 +76,8 @@ func (q *RedisQueue) Dequeue(ctx context.Context) (*task.Task, error) {
 	// Get task data
 	data, err := q.client.Get(ctx, taskPrefix+taskID).Bytes()
 	if err != nil {
-		if err == redis.Nil {
-			// Task data missing, shouldn't happen but handle gracefully
+		if errors.Is(err, redis.Nil) {
+			// Task data missing shouldn't happen but handle gracefully
 			return nil, ErrTaskNotFound
 		}
 		return nil, err
@@ -88,7 +89,7 @@ func (q *RedisQueue) Dequeue(ctx context.Context) (*task.Task, error) {
 func (q *RedisQueue) Get(ctx context.Context, taskID string) (*task.Task, error) {
 	data, err := q.client.Get(ctx, taskPrefix+taskID).Bytes()
 	if err != nil {
-		if err == redis.Nil {
+		if errors.Is(err, redis.Nil) {
 			return nil, ErrTaskNotFound
 		}
 		return nil, err
